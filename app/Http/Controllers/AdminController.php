@@ -146,12 +146,7 @@ class AdminController extends Controller
     public function updateCar(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'brand' => 'sometimes|required|string|max:255',
-            'title' => 'sometimes|required|string|max:255',
             'description' => 'sometimes|required|string',
-            'colors' => 'sometimes|required|array',
-            'pictures' => 'sometimes|required|array',
-            'year' => 'sometimes|required|integer|min:1900|max:2100',
             'price' => 'sometimes|required|numeric|min:0',
             'customs_price' => 'sometimes|required|numeric|min:0',
             'available_quantity' => 'sometimes|required|integer|min:0',

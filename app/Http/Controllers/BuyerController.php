@@ -92,53 +92,64 @@ public function buyerDashboard()
      * @return \Illuminate\Http\JsonResponse
      */
     public function createOrder(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'cars' => 'required|array',
-        'cars.*.id' => 'required|exists:cars,id',
-        'cars.*.price' => 'required|numeric',
-        'shipping_location_id' => 'required|exists:shipping_locations,id',
-        'shipping_method_id' => 'required|exists:shipping_methods,id',
-        'total_order' => 'required|numeric',
-        'payment_ref' => 'required|string',
-    ]);
+    {
+        $validator = Validator::make($request->all(), [
+            'cars' => 'required|array',
+            'cars.*.id' => 'required|exists:cars,id',
+            'cars.*.price' => 'required|numeric',
+            'shipping_location_id' => 'required|exists:shipping_locations,id',
+            'shipping_method_id' => 'required|exists:shipping_methods,id',
+            'total_order' => 'required|numeric',
+            'payment_ref' => 'required|string',
+        ]);
 
-    if ($validator->fails()) {
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $buyer = Auth::user();
+        $orders = [];
+
+        foreach ($request->input('cars') as $carData) {
+            $car = Car::findOrFail($carData['id']);
+
+            // Check if the car has available quantity
+            if ($car->available_quantity <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Car is out of stock',
+                ], 400);
+            }
+
+            $order = new Order();
+            $order->car_id = $car->id;
+            $order->buyer_id = $buyer->id;
+            $order->total_amount = $carData['price'];
+            $order->car_vin = $this->generateVIN();
+            $order->payment_reference = $request->input('payment_ref');
+            $order->shipping_location_id = $request->input('shipping_location_id');
+            $order->shipping_method_id = $request->input('shipping_method_id');
+            $order->save();
+
+            // Reduce the available quantity of the car
+            $car->available_quantity -= 1;
+            $car->save();
+
+            $orders[] = $order->load('buyer', 'car', 'shippingLocation', 'shippingMethod');
+        }
+
+        SendBuyerOrderNotifications::dispatch($order, true);
+
         return response()->json([
-            'success' => false,
-            'message' => 'Validation failed',
-            'errors' => $validator->errors(),
-        ], 422);
+            'success' => true,
+            'message' => 'Orders created successfully',
+            'orders' => $orders,
+        ], 201);
     }
-
-    $buyer = Auth::user();
-    $orders = [];
-
-    foreach ($request->input('cars') as $carData) {
-        $car = Car::findOrFail($carData['id']);
-
-        $order = new Order();
-        $order->car_id = $car->id;
-        $order->buyer_id = $buyer->id;
-        $order->total_amount = $carData['price'];
-        $order->car_vin = $this->generateVIN();
-        $order->payment_reference = $request->input('payment_ref');
-        $order->shipping_location_id = $request->input('shipping_location_id');
-        $order->shipping_method_id = $request->input('shipping_method_id');
-        $order->save();
-
-        $orders[] = $order->load('buyer', 'car', 'shippingLocation', 'shippingMethod');
-    }
-
-    SendBuyerOrderNotifications::dispatch($order, true);
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Orders created successfully',
-        'orders' => $orders,
-    ], 201);
-}
-
 
 
     /**
